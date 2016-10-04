@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="ja">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <meta name="author" content="Haidong Wang">
+
+        <title>mijin開発入門</title>
+
+        <link rel="stylesheet" href="css/reveal.css">
+        <link rel="stylesheet" href="css/theme/solarized.css">
+
+        <!-- Theme used for syntax highlighting of code -->
+        <link rel="stylesheet" href="lib/css/github-gist.css">
+
+        <!-- use mac japanese font style -->
+    <style type="text/css">
+      * {
+        font-family:  -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, "Segoe UI", Roboto, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "ヒラギノ角ゴ ProN W3", "Hiragino Kaku Gothic ProN", "メイリオ", Meiryo, sans-serif !important;
+      }
+
+      .reveal pre {
+        width: 95%;
+      }
+
+      section.single-image img {
+        width: 1100px;
+      }
+
+      section.bg-text h2 {
+        color: #2c6782;
+      }
+
+      section.cover-text h1, section.cover-text h3, section.cover-text p  {
+        color: #ffffff;
+      }
+
+      section.large-code {
+        top: 20px !important;
+      }
+      section.large-code pre code {
+        max-height: 750px !important;
+      }
+    </style>
+
+        <!-- Printing and PDF exports -->
+        <script>
+            var link = document.createElement( 'link' );
+            link.rel = 'stylesheet';
+            link.type = 'text/css';
+            link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+            document.getElementsByTagName( 'head' )[0].appendChild( link );
+        </script>
+    </head>
+    <body>
+        <div class="reveal">
+            <div class="slides">
+        <section class="cover-text" data-background-image="image/cover2.jpg">
+                    <h1>Mijin開発入門</h1>
+                    <h3>Javaサンプルからmijinアプリの開発</h3>
+                    <p>
+                        フィンテック戦略室 / 王 海東
+                    </p>
+        </section>
+
+        <section data-markdown
+           data-separator="\n---\n$"
+           data-separator-vertical="\n--\n$"
+           data-separator-notes="^Note:"
+           data-charset="utf-8">
+          <script type="text/template">
+            ### 免責事項
+
+            - 本資料に記載されている情報や見解 (URL 等のインターネット Web サイトに関する情報を含む) は、将来予告なしに変更されることがあります。
+
+            - 利用者、その他の第三者が本資料のソースコードに関連して直接又は間接に被ったいかなる損害に対しても、賠償等の一切の責任を負わず、かつ、利用者はこれに対して本資料のソースコードを免責するものとします。
+
+            - 本資料のソースコードにエラー、バグ等の不具合がないことを保証しません。またその修正義務も負いません。
+
+            --
+
+            ### 予備知識
+
+            - Java 8(特にlambda文法)
+            - Gradle(Mavenのようなビルドツール)
+            - Spring Framework 4.2.x以上(Spring BootとSpring MVC)
+            - NEM/mijinの基礎知識
+
+            ---
+
+            ### Agenda
+
+            + BlockChain概要
+            + 想定シナリオ
+            + アーキテクチャ設計
+            + NEM/mijinのAPI概要
+            + NEM/mijinのAPI詳細と使用
+            + 開発環境構築とサンプル解説
+
+            ---
+
+            ### BlockChain概要
+
+            + 特殊な**分散**データベース
+              - 時間順で追加のみ
+              - すべてのデータを各ノードに分散
+              - 定期的にレコード（トランザクションデータ）をブロックにまとめる
+              - ブロックに前のブロックのHash値を持つ
+              - REST API経由でアクセス
+
+            --
+
+            ### BlockChain特徴からの制限
+
+            + データ整合性をアプリ側に任せる
+              - 一時的にチェーンの分岐がある（データ不整合）
+              - トランザクションを確定するまで時間がかかる
+
+            + ロールバックが難しい
+              - プライベートなら、管理者による返金トランザクションを発行できる
+              - マルチシグネチャの仕組みを用意する
+              - 何れにしても管理者が不要、仲介役が不要のBlockChainの設計思想と逆向き
+
+            + ブロックに大きいサイズデータを入れない
+              - すべてのデータをすべてのノードに分散するので、データサイズが大きくなると、データ分散処理の負荷が高く、システム全体のパフォーマンスが低下しかねない
+
+            ---
+
+            ## 想定シナリオ
+
+            - **ブロックチェインが有効なユースケースを、我々はまだ知らないと思ったほうがいい**
+
+            - ログイン(UX検討が必要)
+              * サーバー側に公開鍵を持つ
+              * ログインの際、ランダムの文字列を表示
+              * ユーザが自分の秘密鍵で署名し、サーバーに返信
+              * サーバー側にユーザーの公開鍵を使って、署名検証
+              * サーバーをハッカーされても、パスワード流出のリスクが無い
+
+            --
+
+            ## 想定シナリオ(続き)
+
+            - 証明書の有効性検証、発行
+              + 証明書の番号とファイルのHash値をBlockChainに登録
+              + 証明書の変更、発行の場合、BlockChainの送金トランザクションを実行
+                * 区役所の住民票、納税証明等
+                * マルチシグネチャを使うと、区役所の担当者のみが住民票の内容を変更できない仕組みも可能
+            - 資産管理
+              + 所有権の譲渡
+              + 資産を通貨のように定義し、入出金のトランザクションで資産管理を行う
+                * PC管理台帳を置き換わる
+            - 取引監査、不正管理
+              + 作業ログ、会議記録、取引記録をBlockChainに保存
+                * ドキュメント番号とファイルのHash値
+          </script>
+        </section>
+
+                <section>
+          <section>
+            <h3>想定のアーキテクチャ</h3>
+            <img src="image/blockchain_dev_arch.png" alt="BlockChainアプリのアーキテクチャ" />
+          </section>
+          <section>
+            <h3>MijinのJavaアプリ</h3>
+            <img src="image/mijin_java_arch.png" alt="Javaアプリのアーキテクチャ" />
+          </section>
+        </section>
+
+        <section data-markdown
+           data-separator="\n---\n$"
+           data-separator-vertical="\n--\n$"
+           data-separator-notes="^Note:"
+           data-charset="utf-8">
+          <script type="text/template">
+            ### 用語解説
+
+            + 参考：http://mijin.io/forums/forum/日本語/243-mijin-用語集＆参考書
+              - NEM： New Economy Movement （新経済運用） http://nem.io
+              - NIS： NEM Infrastructure Server
+              - NCC： NEM Community Client。NISにおけるウォレットを指す
+              - XEM： NEMにおける暗号通貨
+              - mosaic： アセット（自己資産）
+              - namespace： DNSのようなドメイン概念　http://mijin.io/ja/543.html
+              - Ed25519：楕円曲線の署名方式で ECDSA よりも安全で、パフォーマンスが良い電子署名アルゴリズム
+
+            --
+
+            + 続き
+              - ノード： サーバ
+              - Private Key： 秘密鍵（暗証番号のようなもの）
+              - Public Key： 公開鍵（送金相手 [fooさん]の公開鍵で暗号することで、fooさんだけが自分の秘密鍵で復号できる）
+              - アドレス： 口座番号
+              - ウォレット： アドレスと秘密鍵を格納するソフトウェア
+              - マルチシグネチャ： 複数鍵署名（2つ以上（M-of-N）の○○と○○で暗号。略称名：マルチシグ）
+              - トランザクション： 取引内容（電子台帳）
+              - ハッシュ： 二進法の入力に対する、デジタルなフィンガープリント（電子署名、ハッシュ値とも言う）
+          </script>
+        </section>
+
+        <section>
+        <section data-markdown
+           data-separator="\n---\n$"
+           data-separator-vertical="\n--\n$"
+           data-separator-notes="^Note:"
+           data-charset="utf-8">
+          <script type="text/template">
+            ### NEMのNIS API概要
+
+            * mijinはNEMのAPI（インタフェース）を準拠する
+              + 接続ネットワークの種類は「mijin」を指定する必要
+              ```java
+              // choose mijin network
+              NetworkInfos.setDefault(NetworkInfos.fromFriendlyName("mijinnet"));
+              ```
+            * ソースコード https://github.com/NemProject/nem.core
+              + Java 8で開発
+            * ドキュメント http://bob.nem.ninja/docs/
+              + ver 1.1.8 2015-11-06に公開（最新のソースコードを反映していないかも）
+
+            ---
+
+            ### NEMのNIS API概要(続き)
+
+            * 機能
+              + アカウント関連
+              + システム関連
+              + トランザクション関連
+
+            * アクセス方式
+              + Http JSON GET
+              + Http JSON POST
+
+            * 実行環境
+              + Local
+                - BlockChainのNodeサーバーに実行
+                - **本資料の対象外**
+              + Remote
+                - BlockChain外部から接続して実行
+          </script>
+        </section>
+
+        <section class="single-image">
+          <img src="image/NIS_API_summary.png" alt="NIS API概要" />
+        </section>
+
+        <section>
+          <h4>http GET接続</h4>
+          <p><pre><code class="java" data-trim data-noescape>
+final CompletableFuture<Deserializer > future =  mijinUtil.getConnector().<mark>getAsync</mark>(
+        mijinUtil.getMijinNodeEndpoint(),  // root url
+        NisExtendApiId.NIS_REST_ACCOUNT_GENERATE, // context url
+        null  // query parameters string, foo=bar&name=wang etc.
+);
+
+
+future.thenAccept(d -> {
+    // 戻り値の解析
+
+}).exceptionally(e -> {
+    // エラー処理
+
+    return null;
+}).join();
+          </code></pre></p>
+        </section>
+        <section>
+          <h4>http POST接続</h4>
+          <p><pre><code class="java" data-trim data-noescape>
+final RequestAnnounce request =  ...;  // build request object
+
+final CompletableFuture<Deserializer> future = getConnector().<mark>postAsync</mark>(
+        getMijinNodeEndpoint(),  // root url
+        NisApiId.NIS_REST_TRANSACTION_ANNOUNCE, // context url
+        new HttpJsonPostRequest(request));  // json post body
+
+future.thenAccept(d -> {
+    // 戻り値の解析
+
+}).exceptionally(e -> {
+    // エラー処理
+
+    return null;
+}).join();
+          </code></pre></p>
+        </section>
+        </section>
+
+        <section data-markdown
+           data-separator="\n---\n$"
+           data-separator-vertical="\n--\n$"
+           data-separator-notes="^Note:"
+           data-charset="utf-8">
+          <script type="text/template">
+            ### NIS API詳細
+
+            + 常用のmodelクラス
+              - org.nem.core.model.**Account** アカウント
+              - org.nem.core.model.**Address** アドレス
+              - org.nem.core.model.primitive.**Amount** XEMの金額
+                * Amount.fromNem(final long amount)
+                * Amount.fromMicroNem(final long amount)
+                * micro XEM * 1000000 = XEM
+
+            --
+
+            ### アカウント関連
+
+            + アカウント新規作成
+              - オフライン
+
+              ```Java
+              final KeyPair keyPair = new KeyPair();
+              final Account newAccount = new Account(keyPair);
+
+              ```
+              - オンライン(NodeにGet requestを投げ)
+
+              ```http
+              GET /account/generate
+              ```
+
+            --
+
+            ### アカウント関連
+
+            + アカウント残高確認
+              - アカウント情報取得(XEM確認)
+                ```http
+                GET /account/get?address=xxxxxx
+                ```
+              - アカウント所持mosaic情報取得
+                ```http
+                GET /account/mosaic/owned?address=xxxxxx
+                ```
+
+            --
+
+            ### アカウント関連
+
+            + アカウント取引情報の確認
+              - unconfirmed transaction
+                ```http
+                GET /account/unconfirmedTransactions?address=xxxxxx
+                ```
+              - トランザクション履歴
+                ```http
+                GET /account/transfers/all?address=xxxxxx
+                ```
+                * 最大25件を返す
+                * hash或いはidのパラメータを追加して、改ページを実現できる
+          </script>
+        </section>
+
+        <section>
+        <section data-markdown
+           data-separator="\n---\n$"
+           data-separator-vertical="\n--\n$"
+           data-separator-notes="^Note:"
+           data-charset="utf-8">
+          <script type="text/template">
+            ### NIS API詳細(トランザクション関連)
+
+            + トランザクションの処理はhttp POSTのみ
+            + トランザクションの処理フロー
+              1. トランザクション・タイプによって、トランザクションデータを用意
+              2. トランザクションを署名する
+              3. トランザクションデータをシリアライズする
+              4. トランザクションをNodeに送付（http POST）
+              5. トランザクションの結果判定(**非同期**)
+          </script>
+        </section>
+
+        <section class="large-code">
+          <h4>トランザクション処理フロー</h4>
+          <p><pre><code class="java" data-trim data-noescape>
+// ① prepare transaction data
+final Transaction transaction = ...;
+// ② 署名
+transaction.<mark>sign()</mark>;
+// ③ シリアライズ
+final byte[] data = <mark>BinarySerializer.serializeToBytes(transaction.asNonVerifiable())</mark>;
+final RequestAnnounce request = new RequestAnnounce(data, transaction.getSignature().getBytes());
+
+// ④ Nodeにトランザクションデータを送信
+final CompletableFuture<Deserializer> future = getConnector().<mark>postAsync</mark>(
+        getMijinNodeEndpoint(),
+        NisApiId.NIS_REST_TRANSACTION_ANNOUNCE,
+        new HttpJsonPostRequest(request));
+
+// ⑤ 結果判定
+future.thenAccept(deserializer -> {
+    // 戻り値の解析
+    final NemAnnounceResult result = new NemAnnounceResult(deserializer);
+
+    if (result.getCode() == 1) {
+        // 成功の場合
+
+    } else {
+        // エラー処理
+
+    }
+}).exceptionally(e -> {
+    // エラー処理
+
+    return null;
+}).<mark>join()</mark>;
+          </code></pre></p>
+        </section>
+
+        <section data-markdown
+           data-separator="\n---\n$"
+           data-separator-vertical="\n--\n$"
+           data-separator-notes="^Note:"
+           data-charset="utf-8">
+          <script type="text/template">
+            ### トランザクション関連
+
+            + 送金(TransferTransaction)
+              - XEMのみ送金
+              - Message付き(メッセージ送信)
+              - Mosaic付き（Mosaic送付）
+          </script>
+        </section>
+
+        <section class="large-code">
+          <h4>XEMのみ送金</h4>
+          <p><pre><code class="java" data-trim data-noescape>
+final TransferTransaction transaction = new TransferTransaction(
+        version,                          // version(without mosaic: 1, with mosaic: 2)
+        timeInstant,                      // time instant
+        sender,                           // sender
+        recipient,                        // recipient
+        Amount.fromNem(amountOfXem),      // amount in xem
+        <mark>null</mark>);               // attachment (message, mosaics)
+
+transaction.setDeadline(timeInstant.addHours(23));
+transaction.sign(); // 楕円曲線暗号で署名
+          </code></pre></p>
+        </section>
+
+        <section class="large-code">
+          <h4>Message付き(メッセージ送信)</h4>
+          <p><pre><code class="java" data-trim data-noescape>
+// plain message sample (max length 160 bytes)
+PlainMessage message =  new PlainMessage("message content".getBytes());
+
+// message attachment
+TransferTransactionAttachment attachment = new TransferTransactionAttachment();
+attachment.<mark>setMessage</mark>(message); // plain text or encrypted text message
+
+final TransferTransaction transaction = new TransferTransaction(
+        version,                          // version(Mosaic無し：1、Mosaicあり：2)
+        timeInstant,                      // time instant
+        sender,                           // sender
+        recipient,                        // recipient
+        Amount.fromNem(amountOfXem),      // amount in xem
+        <mark>attachment</mark>);         // attachment (message, mosaics)
+
+transaction.setDeadline(timeInstant.addHours(23));
+transaction.sign(); // 楕円曲線暗号で署名
+          </code></pre></p>
+        </section>
+
+        <section class="large-code">
+          <h4>Mosaic付き（Mosaic送付）</h4>
+          <p><pre><code class="java" data-trim data-noescape>
+// set mosaic
+final MosaicId mosaicId = new MosaicId(new NamespaceId("sjicoin"), "sjicoin");
+final long mosaicAmount = RANDOM.nextInt(1000);
+final Mosaic mosaic = new Mosaic(mosaicId, Quantity.fromValue(mosaicAmount));
+
+final TransferTransactionAttachment attachment = new TransferTransactionAttachment();
+attachment.<mark>addMosaic</mark>(mosaic);
+
+final TransferTransaction transaction = new TransferTransaction(
+        version,                          // version(Mosaic無し：1、Mosaicあり：2)
+        timeInstant,                      // time instant
+        sender,                           // sender
+        recipient,                        // recipient
+        <mark>Amount.fromNem(1)</mark>,   // mosaic multiply(http://bob.nem.ninja/docs/#version-2-transfer-transactions)
+        <mark>attachment</mark>);         // attachment (message, mosaics)
+
+// calculate transfer fee by mosaic definition
+// for simplicity, assume only one type of mosaic is sent here
+final MosaicFeeInformation feeInfo =
+        new MosaicFeeInformation(Supply.fromValue(mosaicDef.getInitialSupply()), mosaicDef.getDivisibility());
+TransactionFeeCalculator calculator = new DefaultTransactionFeeCalculator(id -> feeInfo);
+transaction.setFee(calculator.calculateMinimumFee(transaction));
+
+transaction.setDeadline(timeInstant.addHours(23));
+transaction.sign(); // 楕円曲線暗号で署名
+          </code></pre></p>
+        </section>
+
+        <section data-markdown
+           data-separator="\n---\n$"
+           data-separator-vertical="\n--\n$"
+           data-separator-notes="^Note:"
+           data-charset="utf-8">
+          <script type="text/template">
+            ### トランザクション関連
+
+            + Namespace新規作成
+            + Mosaic新規作成
+          </script>
+        </section>
+
+        <section class="large-code">
+          <h4>Namespace新規作成</h4>
+          <p><pre><code class="java" data-trim data-noescape>
+final ProvisionNamespaceTransaction transaction = new ProvisionNamespaceTransaction(
+        timeInstant,
+        sender,
+        newPart,
+        parent);  // set null when create root namespace
+
+// transaction.setFee(Amount.fromNem(108));
+transaction.setDeadline(timeInstant.addHours(23));
+transaction.sign();
+          </code></pre></p>
+        </section>
+
+        <section class="large-code">
+          <h4>Mosaic新規作成</h4>
+          <p><pre><code class="java" data-trim data-noescape>
+// set mosaic definition
+final MosaicId mosaicId = new MosaicId(namespaceId, mosaicName);
+final MosaicDescriptor descriptor = new MosaicDescriptor("provide a description for the mosaic here");
+
+final Properties properties = new Properties();
+
+properties.put("initialSupply", Long.toString(1000000000));
+properties.put("divisibility", Long.toString(3));
+properties.put("supplyMutable", Boolean.toString(true));
+properties.put("transferable", Boolean.toString(true));
+
+final MosaicProperties mosaicProperties = new DefaultMosaicProperties(properties);
+
+// Optionally a levy can be supplied. It is allowed to be null.
+final MosaicLevy levy = new MosaicLevy(
+        MosaicTransferFeeType.Absolute, // levy specifies an absolute value
+        creator,                        // levy is send to the creator
+        MosaicConstants.MOSAIC_ID_XEM,  // levy is paid in XEM
+        Quantity.fromValue(1000)        // Each transfer of the mosaic will transfer 1000 micro XEM
+                                        // from the mosaic sender to the recipient (here the creator)
+);
+
+final MosaicDefinitionCreationTransaction transaction = new MosaicDefinitionCreationTransaction(
+        timeInstant,
+        sender,
+        new MosaicDefinition(creator,mosaicId,descriptor, mosaicProperties, <mark>null</mark>));
+
+// transaction.setFee(Amount.fromNem(108));
+transaction.setDeadline(timeInstant.addHours(23));
+transaction.sign();
+          </code></pre></p>
+        </section>
+        </section>
+
+        <section>
+        <section data-markdown
+           data-separator="\n---\n$"
+           data-separator-vertical="\n--\n$"
+           data-separator-notes="^Note:"
+           data-charset="utf-8">
+          <script type="text/template">
+            ### トランザクション関連
+
+            + Multisigアカウントの作成
+            + Multisigアカウントの変更
+            + Multisigアカウントから出金
+            + Multisigトランザクションの署名
+          </script>
+        </section>
+
+        <section class="large-code">
+          <h4>Multisigアカウントの作成</h4>
+          <p><pre><code class="java" data-trim data-noescape>
+// add cosinger
+final List<MultisigCosignatoryModification> cosignerList =
+        cosigners.stream()
+                .map(cosigner -> new MultisigCosignatoryModification(MultisigModificationType.<mark>AddCosignatory</mark>, cosigner))
+                .collect(Collectors.toList());
+
+// required signer number
+final MultisigMinCosignatoriesModification requiredMinCosignators =
+        new MultisigMinCosignatoriesModification(minCosignerNum);
+
+final TimeInstant timeInstant = mijinUtil.getTimeProvider().getCurrentTime();
+
+final MultisigAggregateModificationTransaction transaction = new MultisigAggregateModificationTransaction(
+        timeInstant,
+        sender,
+        cosignerList,
+        requiredMinCosignators);
+
+transaction.setDeadline(timeInstant.addHours(23));
+transaction.sign();
+          </code></pre></p>
+        </section>
+
+        <section class="large-code">
+          <h4>Multisigアカウントの変更</h4>
+          <p><pre><code class="java" data-trim data-noescape>
+final List<MultisigCosignatoryModification> modifications = new ArrayList<>();
+
+modifyCosigners.forEach((type, cosigner) -> {
+    // <mark>type: add or delete</mark>
+    modifications.add(new MultisigCosignatoryModification(type, cosigner));
+});
+
+// relative change cosigner number (minus when reduce number)
+final MultisigMinCosignatoriesModification minCosignatoriesModification =
+        new MultisigMinCosignatoriesModification(minSingerNumDelta);
+
+// inner transaction
+final MultisigAggregateModificationTransaction modificationTransaction =
+        new MultisigAggregateModificationTransaction(
+                timeInstant, multisig, modifications, minCosignatoriesModification);
+
+modificationTransaction.setDeadline(timeInstant.addHours(23));
+modificationTransaction.sign();
+
+// multisig transaction(need multi cosigners' signature)
+final MultisigTransaction transaction = new MultisigTransaction(
+        timeInstant,
+        signer,
+        modificationTransaction);
+
+transaction.setDeadline(timeInstant.addHours(23));
+transaction.sign();
+</code></pre></p>
+        </section>
+
+        <section class="large-code">
+          <h4>Multisigアカウントから出金</h4>
+          <p><pre><code class="java" data-trim data-noescape>
+// inner transfer transaction(XEM transfer sample)
+final Transaction innerTransaction = new TransferTransaction(
+        1,
+        timeInstant,
+        sender,
+        recipient,
+        Amount.fromNem(amountOfNem),
+        null); // without message and mosaic
+
+innerTransaction.setDeadline(timeInstant.addHours(23));
+innerTransaction.sign();
+
+// wrapped into MultisigTransaction
+MultisigTransaction transaction = new MultisigTransaction(timeInstant, signer, innerTransaction);
+
+transaction.setDeadline(timeInstant.addHours(23));
+transaction.sign();
+          </code></pre></p>
+        </section>
+
+        <section class="large-code">
+          <h4>Multisigトランザクションの署名</h4>
+          <p>Cosignerたちがマルチアカウントのトランザクションを署名する</p>
+          <p><pre><code class="java" data-trim data-noescape>
+// inner hash got from above MultisigTransaction post result or query user unconfirmed transaction
+final Hash innerHash = Hash.fromHexString(innerHashString);
+
+final TimeInstant timeInstant = mijinUtil.getTimeProvider().getCurrentTime();
+
+final MultisigSignatureTransaction transaction = new MultisigSignatureTransaction(
+        timeInstant,
+        signer,
+        sender,
+        innerHash);
+
+transaction.setDeadline(timeInstant.addHours(23));
+transaction.sign();
+          </code></pre></p>
+        </section>
+
+        </section>
+
+        <section>
+        <section>
+            <h2>Demo</h2>
+          <a href="https://github.com/sjitech/mijin-java-sample" target="_blank">https://github.com/sjitech/mijin-java-sample</a>
+          <br />
+          <br />
+          <ul>
+            <li>Java 8</li>
+            <li>Gradle 3.1</li>
+            <li>Spring Boot 1.4.1</li>
+            <li>Spring Framework 4.3.3</li>
+            <li>NEM Core 0.6.77-beta</li>
+          </ul>
+        </section>
+
+        <section class="single-image">
+          <img src="image/demo_env.png" alt="Demoアプリ環境" />
+        </section>
+        </section>
+
+        <section class="bg-text" data-background-image="image/cover0.jpg">
+            <h2>ご清聴有難う御座います！</h2>
+          <br />
+          <br />
+          <br />
+          <br />
+          <br />
+        </section>
+            </div>
+        </div>
+
+        <script src="lib/js/head.min.js"></script>
+        <script src="js/reveal.js"></script>
+
+        <script>
+            // More info https://github.com/hakimel/reveal.js#configuration
+            Reveal.initialize({
+                width: 1260,
+                height: 840,
+                history: true,
+
+                // More info https://github.com/hakimel/reveal.js#dependencies
+                dependencies: [
+                    { src: 'plugin/markdown/marked.js' },
+                    { src: 'plugin/markdown/markdown.js' },
+                    { src: 'plugin/notes/notes.js', async: true },
+                    { src: 'plugin/highlight/highlight.js',
+                        async: true,
+                        callback: function() {
+                        hljs.initHighlightingOnLoad();
+                        }
+                    }
+                ]
+            });
+        </script>
+    </body>
+</html>
